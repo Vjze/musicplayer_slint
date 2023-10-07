@@ -9,7 +9,6 @@ use serde::{Serialize, Deserialize};
 
 pub mod player_work;
 pub mod loadfile;
-pub mod player;
 
 #[derive(Debug, Clone,  PartialEq, Serialize, Deserialize,Default)]
 pub struct Song {
@@ -18,6 +17,7 @@ pub struct Song {
     album: Option<String>,
     duration: Option<f64>,
     date: Option<String>,
+    playing: bool,
     path: PathBuf,
 }
 impl Song {
@@ -29,6 +29,7 @@ impl Song {
             album: None,
             date: None,
             duration: None,
+            playing: false,
         }
     }
 
@@ -81,35 +82,21 @@ impl Song {
 
    
 }
-#[derive(Clone, PartialEq, Debug)]
-enum Status {
-    Play,
-    Suspend,
-    Stop,
-    Next,
-    Prev,
-}
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlayList {
-    file_path: PathBuf,
     songs: Vec<Song>,
 }
 
 impl PlayList {
-    pub fn new(file_path: PathBuf) -> Self {
+    pub fn new() -> Self {
         Self {
-            file_path,
             songs:vec![]
         }
-    }
-    pub fn file_path(&self)-> PathBuf {
-        self.file_path.clone()    
     }
     pub fn songs(&self) -> Vec<Song> {
         self.songs.clone()
     }
-    pub fn add_song(&mut self, songs: Song) {
-        self.songs.push(songs);
-    }
 }
+

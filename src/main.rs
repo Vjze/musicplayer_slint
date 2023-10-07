@@ -25,6 +25,24 @@ fn main() {
         
         }
     });
+    app.on_stop({
+        let cargo_channel = cargo_worker.channel.clone();
+        move || {
+                cargo_channel
+                    .send(player_work::CtrlMessage::Stop)
+                    .unwrap()
+        
+        }
+    });
+    app.on_peaue({
+        let cargo_channel = cargo_worker.channel.clone();
+        move || {
+                cargo_channel
+                    .send(player_work::CtrlMessage::Pause)
+                    .unwrap()
+        
+        }
+    });
     app.run().unwrap();
     cargo_worker.join().unwrap();
 }

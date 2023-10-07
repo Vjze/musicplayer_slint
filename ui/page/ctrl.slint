@@ -3,6 +3,7 @@ export component Ctrl inherits GridLayout {
     callback play();
     callback next();
     callback stop();
+    callback peaue();
     callback loadfile();
     in-out property <int> val;
     in-out property <int> time;
@@ -27,6 +28,13 @@ export component Ctrl inherits GridLayout {
             text: "Play";
             clicked => {
                 root.play()
+            }
+        }
+        peaue := Button {
+            colspan: 1;
+            text: "peaue";
+            clicked => {
+                root.peaue()
             }
         }
         nx := Button {

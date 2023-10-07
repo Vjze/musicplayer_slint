@@ -1,46 +1,44 @@
-use std::{path::Path, fs, rc::Rc};
+use crate::{generated_code::App, Song};
 use ffmpeg_next as ffmpeg;
 use slint::{StandardListViewItem, VecModel};
-use crate::{generated_code::App, Song, PlayList};
+use std::{fs, rc::Rc, path::Path};
 
-
-
-pub async fn run_load(handle: slint::Weak<App>) ->tokio::io::Result<Vec<Song>> {
-    // if let Some(lib_path) = rfd::FileDialog::new().pick_folder(){
-    //     let mut new_library = PlayList::new(lib_path.clone());
-    //     std::thread::spawn(move || {
-        let lib_path = rfd::FileDialog::new().pick_folder().unwrap();
-            let songs = load_files(lib_path.display().to_string().as_str());
-            let song = songs.clone();
-            handle
-                .upgrade_in_event_loop(move |ui| {
-                    
-                    let mut row_data: Vec<slint::ModelRc<StandardListViewItem>> = vec![];
-                    for s in song{
-                        let items = Rc::new(VecModel::default());
-                        let title =  StandardListViewItem::from(slint::format!(
-                            "{}",s.title.unwrap_or("?".to_string())));
-                        let artist =  StandardListViewItem::from(slint::format!(
-                            "{}",s.artist.unwrap_or("?".to_string())));
-                        let album =  StandardListViewItem::from(slint::format!(
-                            "{}",s.album.unwrap_or("?".to_string())));
-                        let date =  StandardListViewItem::from(slint::format!(
-                            "{}",s.date.unwrap_or("?".to_string())));
-                        items.push(title);
-                        items.push(artist);
-                        items.push(album);
-                        items.push(date);
-                        row_data.push(items.into())
-                    }
-                    let data = Rc::new(VecModel::from(row_data));
-                    ui.set_list(data.into())
-                    
-                }).unwrap();
-            // for item in &songs {
-            //     new_library.add_song(item.clone());
-            // }
-        // });
-    // };
+pub async fn run_load(handle: slint::Weak<App>) -> tokio::io::Result<Vec<Song>> {
+    let lib_path = rfd::FileDialog::new().pick_folder().unwrap();
+    let songs = load_files(lib_path.display().to_string().as_str());
+    let song = songs.clone();
+    handle
+        .upgrade_in_event_loop(move |ui| {
+            let mut row_data: Vec<slint::ModelRc<StandardListViewItem>> = vec![];
+            for s in song {
+                let items = Rc::new(VecModel::default());
+                let title = StandardListViewItem::from(slint::format!(
+                    "{}",
+                    s.title.unwrap_or("?".to_string())
+                ));
+                let artist = StandardListViewItem::from(slint::format!(
+                    "{}",
+                    s.artist.unwrap_or("?".to_string())
+                ));
+                let album = StandardListViewItem::from(slint::format!(
+                    "{}",
+                    s.album.unwrap_or("?".to_string())
+                ));
+                let date = StandardListViewItem::from(slint::format!(
+                    "{}",
+                    s.date.unwrap_or("?".to_string())
+                ));
+                items.push(title);
+                items.push(artist);
+                items.push(album);
+                items.push(date);
+                row_data.push(items.into())
+            }
+            let data = Rc::new(VecModel::from(row_data));
+            ui.set_list(data.into())
+        })
+        .unwrap();
+    
     Ok(songs)
 }
 fn load_files(dir: &str) -> Vec<Song> {

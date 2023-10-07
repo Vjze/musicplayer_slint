@@ -1,8 +1,14 @@
-use std::{borrow::BorrowMut, sync::{Arc, Mutex}};
+use std::{
+    io::BufReader,
+    path::PathBuf,
+    sync::mpsc::{channel, Receiver},
+};
 
-use crate::{generated_code::App, loadfile::run_load, Song, PlayList, player::paly_song, Status};
+use crate::{
+    generated_code::App, loadfile::run_load,  Song, PlayList, 
+};
 use futures::future::{Fuse, FutureExt};
-use rodio::OutputStreamHandle;
+use serde::{Deserialize, Serialize};
 use slint::ComponentHandle;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
@@ -10,8 +16,8 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 pub enum CtrlMessage {
     LoadFile,
     Play,
-    // SortDescending { index: i32 },
-    // SortAscending { index: i32 },
+    Stop,
+    Pause,
     Quit,
 }
 
@@ -30,7 +36,6 @@ impl PlayerWorker {
                     .unwrap()
                     .block_on(player_worker_loop(r, handle_weak))
                     .unwrap()
-                
             }
         });
         Self {
@@ -49,35 +54,25 @@ async fn player_worker_loop(
     mut r: UnboundedReceiver<CtrlMessage>,
     handle: slint::Weak<App>,
 ) -> tokio::io::Result<()> {
-    let (_stream, handle_o) = rodio::OutputStream::try_default().unwrap();
-    let play_sink = Arc::new(Mutex::new(rodio::Sink::try_new(&handle_o).unwrap()));
+    let (tx, rx) = channel();
     let mut init_state = AppState {
-        app_status: Arc::new(Mutex::new(Status::Stop)),
-        play_lists: Vec::new(),
-        current_song: Arc::new(Mutex::new(Song::default())),
-        volume: 0.3,
-        progress_rate: 0.5,
-        current_play_list: vec![],
-        sink: play_sink,
-        stream: Arc::new(handle_o),
+        playlists: Vec::new(),
     };
+    let mut playlist = PlayList::new();
     let run_load_future = Fuse::terminated();
     let run_play_future = Fuse::terminated();
-    futures::pin_mut!(
-        run_load_future,
-        run_play_future,
-    );
+    futures::pin_mut!(run_load_future, run_play_future,);
     loop {
         let m = futures::select! {
                 res = run_load_future => {
-                    init_state.current_play_list = res?;
+                    playlist.songs = res?;
                     continue;
                 }
                 res = run_play_future => {
                     res?;
                     continue;
                 }
-                
+
 
             m = r.recv().fuse() => {
                 match m {
@@ -87,30 +82,85 @@ async fn player_worker_loop(
             }
         };
         match m {
-            CtrlMessage::LoadFile  => {
-                run_load_future.set(run_load(handle.clone()).fuse())
-            }
+            CtrlMessage::LoadFile => run_load_future.set(run_load(handle.clone()).fuse()),
             CtrlMessage::Quit => return Ok(()),
             CtrlMessage::Play => {
-                let list = init_state.current_play_list.clone();
-                run_play_future.set(paly_song(list).fuse())
-                
+                // let list = init_state.playlists.clone();
+                let list = playlist.songs();
+                let sta = MusicCommand::Play;
+                let _ = tx.send(sta);
+                run_play_future.set(play(list, &rx).fuse())
+                // run_play_future.set(add_song(init_state).fuse())
+            }
+            CtrlMessage::Stop => {
+                let sta = MusicCommand::Stop;
+                let _ = tx.send(sta);
             },
-            
+            CtrlMessage::Pause => {
+                let sta = MusicCommand::Pause;
+                let _ = tx.send(sta);
+            },
         }
+        
     }
 }
 
-#[derive(Clone)]
-struct AppState {
-    app_status: Arc<Mutex<Status>>,
-    play_lists: Vec<PlayList>,
-    current_song: Arc<Mutex<Song>>,
-    sink: Arc<Mutex<rodio::Sink>>,
-    progress_rate: f64,
-    current_play_list: Vec<Song>,
-    volume: f64,
-    stream: Arc<OutputStreamHandle>,
+#[derive(Serialize, Deserialize)]
+pub struct AppState {
+    #[serde(skip_serializing, skip_deserializing)]
+    pub playlists: Vec<Song>,
 }
 
 
+
+
+async fn play(v: Vec<Song>, rx: &Receiver<MusicCommand>) -> tokio::io::Result<()> {
+    let (_stream, handle) = rodio::OutputStream::try_default().unwrap();
+    let sink = rodio::Sink::try_new(&handle).unwrap();
+    let init = AppState {
+        playlists: v,
+    };
+    for i in init.playlists {
+        let mut state = MusicState::Playing;
+        loop{
+            if let Ok(cmd) = rx.try_recv() {
+                match cmd {
+                    MusicCommand::Pause => {
+                        state = MusicState::Paused;
+                        sink.pause()
+                    }
+                    MusicCommand::Play => {
+                        state = MusicState::Playing;
+                        sink.play()
+                    }
+                    MusicCommand::Stop => {
+                        state = MusicState::Stoped;
+                        sink.stop()
+                    },
+                }
+            }
+
+            if state == MusicState::Playing {
+                let file = std::fs::File::open(i.path()).unwrap();
+                let source = rodio::Decoder::new(BufReader::new(file)).unwrap();
+                sink.append(source);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum MusicCommand {
+    Pause,
+    Play,
+    Stop,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MusicState {
+    Playing,
+    Paused,
+    Stoped,
+}
